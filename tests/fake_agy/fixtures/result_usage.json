@@ -1,0 +1,14 @@
+{
+  "conversation_id": "00000000-0000-4000-8000-000000000002",
+  "status": "SUCCESS",
+  "response": "FAKE_OK with usage\n",
+  "duration_seconds": 12.5,
+  "num_turns": 3,
+  "usage": {
+    "input_tokens": 14507,
+    "output_tokens": 2311,
+    "thinking_tokens": 512,
+    "cache_read_tokens": 803,
+    "total_tokens": 18133
+  }
+}

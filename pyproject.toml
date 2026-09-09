@@ -6,13 +6,28 @@ build-backend = "setuptools.build_meta"
 name = "agy-cloud"
 version = "0.1.0"
 requires-python = ">=3.11"
+# Runtime dependencies stay empty in T0: agy_cloud is a stdlib-only contract
+# layer and no service code exists yet. Downstream tasks add their own deps.
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.8"]
+# Dev/test tools required by make lint / make test / make contract-check.
+dev = [
+    "pytest>=8",
+    "ruff>=0.8",
+    "PyYAML>=6",
+    "jsonschema>=4.21",
+    "referencing>=0.31",
+]
+
+[tool.setuptools.packages.find]
+# Only the shared contract package is distributed. api/, worker/, cli/ are
+# task-owned skeletons and are not installable until their owners exist.
+include = ["agy_cloud*"]
 
 [tool.ruff]
 line-length = 100
+extend-exclude = [".venv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

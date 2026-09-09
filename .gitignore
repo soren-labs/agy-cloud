@@ -1,9 +1,25 @@
-.venv/
+# Python
 __pycache__/
 *.py[cod]
-.env
-*.pem
-*.jsonl
-gcp-key*.json
-*oauth-token*
 .pytest_cache/
+.venv/
+venv/
+agy_cloud.egg-info/
+
+# Build/evidence artifacts (*.jsonl is ignored repo-wide EXCEPT contract fixtures)
+*.jsonl
+!tests/fake_agy/fixtures/*.jsonl
+
+# Credentials and key material — never commit
+*.pem
+*.json.key
+*-key.json
+gcp-key*.json
+gcp-sa-key.json
+service_account*.json
+*oauth-token*
+.env
+.env.*
+
+# OS / editor
+.DS_Store
