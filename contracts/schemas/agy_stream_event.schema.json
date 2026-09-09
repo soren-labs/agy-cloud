@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agy.cloud/contracts/schemas/agy_stream_event.schema.json",
+  "title": "agy --output-format stream-json event (P0-verified shape)",
+  "description": "Newline-delimited objects routed by the top-level 'event' key. P0 evidence: {'event':'result','result':{...}} and init/step_update are likewise NESTED (docs/P0-INVENTORY.md §4). Consumers must route on 'event' and read the nested payload; they must not parse a top-level 'status'. Exact values of tools/permission_mode/state/step_type were not captured in P0; only the key shapes are contractual. A stream without a result event is a no_result failure.",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["event", "init"],
+      "properties": {
+        "event": {"const": "init"},
+        "init": {
+          "type": "object",
+          "required": ["model", "cwd", "tools", "permission_mode"],
+          "properties": {
+            "model": {"type": "string"},
+            "cwd": {"type": "string"},
+            "tools": {"type": "array", "items": {"type": "string"}},
+            "permission_mode": {"type": "string"}
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["event", "step_update"],
+      "properties": {
+        "event": {"const": "step_update"},
+        "step_update": {
+          "type": "object",
+          "required": ["step_index", "state", "step_type"],
+          "properties": {
+            "step_index": {"type": "integer", "minimum": 0},
+            "state": {"type": "string"},
+            "step_type": {"type": "string"}
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["event", "result"],
+      "properties": {
+        "event": {"const": "result"},
+        "result": {"oneOf": [
+          {"type": "null", "description": "no_result failure: result event present but empty."},
+          {"$ref": "https://agy.cloud/contracts/schemas/agy_result.schema.json"}
+        ]}
+      }
+    }
+  ]
+}
