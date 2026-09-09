@@ -5,7 +5,7 @@
 ## 启动顺序
 
 1. 建立最小仓库，放用户DESIGN、PREP、本次范围文件、AGENTS与PR模板；P0代码作为reference，不作为生产worker入口。
-2. 授权开发平台访问仓库，核实模型ID；Hoplite不可用时可使用Cursor独立review agent，不让产品实现依赖某个review平台。
+2. 授权开发平台访问仓库，按平台分配模型：Cursor 只承担 Cursor Grok 4.6，Hoplite 承担 GLM 5.3 与 DeepSeek；每次派发前读取平台当前精确 model ID。Hoplite 不可用时可使用 Cursor 独立 review agent，不让产品实现依赖某个 review 平台。
 3. T0先合并：接口/状态/存储适配契约、fake_agy、测试入口、CI以及verify-creds入口。云凭证验证此时才具备可执行命令。
 4. 并行准备CI资源和授权；无凭证开发继续，真实集成测试在凭证验证通过后启用。
 5. 依赖完成且PR审查通过后推进下一批，最后部署prod并运行真实验收。
@@ -34,7 +34,7 @@ T11（GitHub入站触发）和T13中的MCP移到P2。code以外的review/plan同
 
 ## 开发与审查规则
 
-- 单任务单分支单PR；开发模型和审查模型不同。优先沿用PREP角色，但必须以平台实际可用模型为准。
+- 单任务单分支单PR；开发模型和审查模型不同。开发/审查平台按上面的模型分工执行，具体 ID 以平台实时列表为准。
 - reviewer提交正式审查；COMMENTED不能计作APPROVED。GitHub审批身份必须满足实际仓库规则，自己审自己不算完成。
 - 不把某一份测试日志等同于全部验收。PR列明unit、mock、CI集成、真实云验证各自结果或尚未执行原因。
 - 必需检查名统一为实际job `lint-unit`，配置分支保护前用一次真实CI确认显示名。

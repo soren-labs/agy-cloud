@@ -262,17 +262,17 @@ AGENTS.md 中要求：agent 完成开发后给自己的 PR 加 `run-itest` label
 
 ## 6. DAG 与任务分配
 
-### 6.1 模型角色
+### 6.1 模型角色（按平台修正版）
 
 | 模型 | 定位 | 理由 |
 | --- | --- | --- |
-| **glm-5.3** | 主力开发：控制面/runner 等重逻辑 | 最强编码 |
-| **grok-4.6** | ① 全部 PR 的 review agent ② 安全/并发敏感模块的开发 | 挑错敏锐，用于交叉审查 |
-| **deepseek-v4-flash** | 测试编写、fake_agy、CLI、infra 脚本、文档、CI 修复 follow-up | 快且便宜，适合大量轻任务 |
+| **Hoplite `z-ai/glm-5.3`** | 主力开发：控制面/runner 等重逻辑 | Hoplite 的重逻辑开发模型 |
+| **Cursor `cursor-grok-4.6-high-fast`** | Cursor 侧 review、安全/并发敏感模块开发 | Cursor 当前可用的 Grok 4.6 ID |
+| **Hoplite `deepseek/deepseek-v4-flash-0731`** | 测试编写、fake_agy、CLI、infra 脚本、文档、CI 修复 follow-up | Hoplite 的轻量批量任务模型 |
 
-规则：**每个任务 dev 模型 ≠ review 模型**；grok-4.6 开发的模块由 glm-5.3 review。review 统一走 Hoplite thread 或 Cursor review-mode agent，prompt 要求输出 `verdict + findings[]` 并作为 PR review 提交。
+规则：**每个任务 dev 模型 ≠ review 模型**；Hoplite GLM 开发的模块由 Cursor Grok 4.6 review，Cursor Grok 开发的模块由 Hoplite GLM review。轻量补充任务使用 Hoplite DeepSeek。review prompt 要求输出 `verdict + findings[]` 并作为 PR review 提交。
 
-> 开工前验证：`GET api.cursor.com/v0/models` 确认三个模型 id 的确切写法，记入 CONTRACTS.md 顶部。
+> 开工前验证：分别查询 Cursor 与 Hoplite 的当前模型列表，确认上述模型的确切写法，记入 CONTRACTS.md 顶部；不要把 Hoplite 模型 ID 当作 Cursor 模型 ID。
 
 ### 6.2 DAG（W0 人工完成 = 本文档 §1–§5；W1 起全部云端并发）
 
@@ -311,23 +311,23 @@ W5  (本地,人工+真凭证): deploy.sh 到 prod → 跑 T12 → 验收 design.
 
 | ID | 交付物（对应 DESIGN 章节） | dev | review | tests by | 平台 | 验收 |
 | --- | --- | --- | --- | --- | --- | --- |
-| T0 | CONTRACTS.md、目录骨架、fake_agy、Makefile、ci.yml（§7、§8、附录B） | glm-5.3 | grok-4.6 **+ 你本人** | deepseek | Cursor | fake_agy 两种 output-format 可跑；CI 绿 |
-| T1 | `infra/{deploy,iam,scheduler,image-build}.sh`（§9、§4.1） | deepseek | grok-4.6 | deepseek | Cursor | shellcheck 过；`--dry-run` 模式打印全部命令 |
-| T2 | `api/models.py auth.py services/{firestore,storage,secrets}.py`（§8） | glm-5.3 | grok-4.6 | deepseek | Cursor | unit 覆盖 schema/auth；itest 读写真 Firestore(ci) |
-| T3 | `worker/Dockerfile.agent settings.template.json iptables.sh`（§4.4） | grok-4.6 | glm-5.3 | deepseek | Cursor | 容器内 fake_agy 跑通；iptables 规则单测（netns） |
-| T4 | `cli/agyctl.py` 骨架（§7.5） | deepseek | glm-5.3 | deepseek | Cursor | 对 mock server 全命令冒烟 |
-| T5 | `api/services/github_app.py`（§6.1–6.2） | glm-5.3 | grok-4.6 | deepseek | Cursor | itest：对 smoke 仓库真铸 token、开/关测试 PR |
-| T6 | `api/services/gce.py`（§4.2） | grok-4.6 | glm-5.3 | deepseek | Cursor | mock 单测 + （可选)ci 项目真建/删一台 VM |
-| T7 | `api/routes/{agents,runs,repos,models,accounts}.py` + webhook 投递（§7） | glm-5.3 | grok-4.6 | deepseek | Cursor | OpenAPI 与 CONTRACTS 一致性测试 |
-| T8 | `/internal/*`、scheduler、reaper、账号池（§3.5、§5、附录C） | glm-5.3 | **grok-4.6 重点审并发/事务** | deepseek | Cursor | follow-up 竞态的属性测试（并发 enqueue/release 千次无丢单） |
-| T9 | `worker/{startup.sh,runner.py}`（§4.3） | grok-4.6 | glm-5.3 | deepseek | Cursor | e2e-local 内完整 turn 循环 + 快照上传/恢复（fake_agy） |
-| T10 | docker backend + `tests/e2e_local.sh`（§9） | glm-5.3 | grok-4.6 | glm-5.3 | Cursor | 一条命令本机跑通 create→PR→followup→finished |
-| T11 | `/webhooks/github`、`@agy` 触发、autoFix（§6.3–6.4） | glm-5.3 | grok-4.6 | deepseek | Cursor | 重放录制的 webhook 样本；白名单/防循环单测 |
-| T12 | `tests/e2e_gcp.sh` 冒烟六项（P1 验收） | deepseek | glm-5.3 | — | Cursor | 脚本评审通过；执行在 W5 本地 |
-| T13 | agyctl 补全 + `mcp_server.py` + README（§7.5） | deepseek | glm-5.3 | deepseek | Cursor | — |
-| R* | 每个 PR 的交叉 review thread | —(见 dev 行) | 表中 review 列 | — | **Hoplite** | verdict=approve 或 findings 全部处理 |
+| T0 | CONTRACTS.md、目录骨架、fake_agy、Makefile、ci.yml（§7、§8、附录B） | Hoplite `z-ai/glm-5.3` | Cursor `cursor-grok-4.6-high-fast` **+ 你本人** | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | fake_agy 两种 output-format 可跑；CI 绿 |
+| T1 | `infra/{deploy,iam,scheduler,image-build}.sh`（§9、§4.1） | Hoplite `deepseek/deepseek-v4-flash-0731` | Cursor `cursor-grok-4.6-high-fast` | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | shellcheck 过；`--dry-run` 模式打印全部命令 |
+| T2 | `api/models.py auth.py services/{firestore,storage,secrets}.py`（§8） | Hoplite `z-ai/glm-5.3` | Cursor `cursor-grok-4.6-high-fast` | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | unit 覆盖 schema/auth；itest 读写真 Firestore(ci) |
+| T3 | `worker/Dockerfile.agent settings.template.json iptables.sh`（§4.4） | Cursor `cursor-grok-4.6-high-fast` | Hoplite `z-ai/glm-5.3` | Hoplite `deepseek/deepseek-v4-flash-0731` | Cursor→Hoplite | 容器内 fake_agy 跑通；iptables 规则单测（netns） |
+| T4 | `cli/agyctl.py` 骨架（§7.5） | Hoplite `deepseek/deepseek-v4-flash-0731` | Cursor `cursor-grok-4.6-high-fast` | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | 对 mock server 全命令冒烟 |
+| T5 | `api/services/github_app.py`（§6.1–6.2） | Hoplite `z-ai/glm-5.3` | Cursor `cursor-grok-4.6-high-fast` | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | itest：对 smoke 仓库真铸 token、开/关测试 PR |
+| T6 | `api/services/gce.py`（§4.2） | Cursor `cursor-grok-4.6-high-fast` | Hoplite `z-ai/glm-5.3` | Hoplite `deepseek/deepseek-v4-flash-0731` | Cursor→Hoplite | mock 单测 + （可选)ci 项目真建/删一台 VM |
+| T7 | `api/routes/{agents,runs,repos,models,accounts}.py` + webhook 投递（§7） | Hoplite `z-ai/glm-5.3` | Cursor `cursor-grok-4.6-high-fast` | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | OpenAPI 与 CONTRACTS 一致性测试 |
+| T8 | `/internal/*`、scheduler、reaper、账号池（§3.5、§5、附录C） | Hoplite `z-ai/glm-5.3` | Cursor `cursor-grok-4.6-high-fast` **重点审并发/事务** | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | follow-up 竞态的属性测试（并发 enqueue/release 千次无丢单） |
+| T9 | `worker/{startup.sh,runner.py}`（§4.3） | Cursor `cursor-grok-4.6-high-fast` | Hoplite `z-ai/glm-5.3` | Hoplite `deepseek/deepseek-v4-flash-0731` | Cursor→Hoplite | e2e-local 内完整 turn 循环 + 快照上传/恢复（fake_agy） |
+| T10 | docker backend + `tests/e2e_local.sh`（§9） | Hoplite `z-ai/glm-5.3` | Cursor `cursor-grok-4.6-high-fast` | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | 一条命令本机跑通 create→PR→followup→finished |
+| T11 | `/webhooks/github`、`@agy` 触发、autoFix（§6.3–6.4） | Hoplite `z-ai/glm-5.3` | Cursor `cursor-grok-4.6-high-fast` | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | 重放录制的 webhook 样本；白名单/防循环单测 |
+| T12 | `tests/e2e_gcp.sh` 冒烟六项（P1 验收） | Hoplite `deepseek/deepseek-v4-flash-0731` | Cursor `cursor-grok-4.6-high-fast` | — | Hoplite→Cursor | 脚本评审通过；执行在 W5 本地 |
+| T13 | agyctl 补全 + `mcp_server.py` + README（§7.5） | Hoplite `deepseek/deepseek-v4-flash-0731` | Cursor `cursor-grok-4.6-high-fast` | Hoplite `deepseek/deepseek-v4-flash-0731` | Hoplite→Cursor | — |
+| R* | 每个 PR 的交叉 review thread | —(见 dev 行) | 对应平台的交叉 review | — | **Cursor ↔ Hoplite** | verdict=approve 或 findings 全部处理 |
 
-并发预算：Cursor Pro ≈ 8 slots。W1 五个任务 + 2–3 个 review thread 正好吃满；deepseek 的测试补充任务用 follow-up 打进原 agent 而非新开。
+并发预算：不要再按“Cursor 承担全部任务”估算。主力开发和轻量补充分布在 Hoplite，Cursor 主要承担 Grok review；发 W1 五个并发任务前先读取两个平台的当前配额，DeepSeek 的测试补充优先作为原线程 follow-up。
 
 ### 6.4 任务 prompt 模板（编排时逐个填充）
 
@@ -348,7 +348,7 @@ W5  (本地,人工+真凭证): deploy.sh 到 prod → 跑 T12 → 验收 design.
 - [ ] `agy-cloud-smoke` 建好，含 `.agy/environment.json` 与可跑的 unittest
 - [ ] Cursor GitHub App 已授权两仓库（`/v0/repositories` 可见）
 - [ ] Hoplite project 槽位腾出，project `agy-cloud` 建好并绑仓库
-- [ ] `GET /v0/models` 确认 glm-5.3 / grok-4.6 / deepseek-v4-flash 的准确模型 id
+- [ ] 分别查询 Cursor 与 Hoplite 的模型列表：Cursor Grok 4.6、Hoplite `z-ai/glm-5.3` 与 `deepseek/deepseek-v4-flash-0731` 的准确 ID 已记录
 - [ ] GCP `agy-cloud-prod` / `agy-cloud-ci` 建好：API、Firestore、GCS、预算告警
 - [ ] `agy-ci` SA + key 生成；vCPU 配额已记录（不足则已提额）
 - [ ] Secrets 配入 Cursor（4 项）与 Hoplite（4 项）；本地 key 文件已 shred
@@ -356,7 +356,7 @@ W5  (本地,人工+真凭证): deploy.sh 到 prod → 跑 T12 → 验收 design.
 - [ ] GitHub App `agy-cloud-agent`（prod）+ 测试 App（ci）注册，三件套入 Secret Manager
 - [ ] ≥2 个 Antigravity 专用账号已登录，token 存入 prod `agy-token-pro-*`
 - [ ] `make verify-creds` 在 Cursor / Hoplite / Actions 三处各验证一次全绿
-- [ ] T0 由 glm-5.3 完成、grok-4.6 review、你本人终审合并 → 发 W1 五个并发任务
+- [ ] T0 由 Hoplite GLM 5.3 完成、Cursor Grok 4.6 review、你本人终审合并 → 再按两平台配额发 W1 任务
 
 ---
 
