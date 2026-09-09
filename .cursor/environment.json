@@ -1,0 +1,5 @@
+{
+  "snapshot": "ubuntu-24.04",
+  "install": "python3 -m pip install -e '.[dev]'",
+  "terminals": []
+}
