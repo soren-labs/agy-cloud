@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "ports": {
+    "preview": 3000
+  },
+  "scripts": {
+    "setup": {
+      "enabled": true,
+      "command": "set -eu; GCLOUD_ROOT=\"$HOME/.local/google-cloud-sdk\"; if [ ! -x \"$GCLOUD_ROOT/bin/gcloud\" ]; then mkdir -p \"$HOME/.local\"; curl --retry 3 --retry-delay 5 -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz | tar -xz -C \"$HOME/.local\"; \"$GCLOUD_ROOT/install.sh\" --quiet --path-update=false --command-completion=false --usage-reporting=false; fi; mkdir -p \"$HOME/.local/bin\"; ln -sf \"$GCLOUD_ROOT/bin/gcloud\" \"$HOME/.local/bin/gcloud\"; printf '%s\\n' 'export PATH=\"$HOME/.local/bin:$HOME/.local/google-cloud-sdk/bin:$PATH\"' >> \"$HOME/.profile\"; printf '%s\\n' 'export PATH=\"$HOME/.local/bin:$HOME/.local/google-cloud-sdk/bin:$PATH\"' >> \"$HOME/.bashrc\""
+    }
+  },
+  "mcpServers": []
+}
