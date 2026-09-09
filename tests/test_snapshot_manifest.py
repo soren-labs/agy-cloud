@@ -163,6 +163,7 @@ def test_missing_snapshot_rejected_unless_interrupted():
             commit=None,
             pr_url=None,
             unpushed=True,
+            error_code="interrupted",
         )
     )
     assert a6 == []  # A6: recovery materials substitute for the snapshot
@@ -170,6 +171,50 @@ def test_missing_snapshot_rejected_unless_interrupted():
 
 def test_tests_failed_with_draft_pr_is_shape_valid():
     problems = validate_completion_manifest(
-        completion_manifest(outcome=CompletionOutcome.TESTS_FAILED, error_code="tests_failed")
+        completion_manifest(
+            outcome=CompletionOutcome.TESTS_FAILED,
+            error_code="tests_failed",
+            tests=RunTestReport("failed", "python3 -m unittest", "agents/a/runs/r/tests.log"),
+        )
     )
     assert problems == []
+
+
+# --- contradictory outcome/tests/error reports (V1 §5.2 semantics) ---
+
+def test_tests_failed_with_passing_tests_rejected():
+    problems = validate_completion_manifest(
+        completion_manifest(outcome=CompletionOutcome.TESTS_FAILED, error_code="tests_failed")
+    )
+    assert any("tests.status=failed" in p for p in problems), problems
+
+
+def test_succeeded_with_failed_tests_rejected():
+    problems = validate_completion_manifest(
+        completion_manifest(
+            tests=RunTestReport("failed", "python3 -m unittest", "agents/a/runs/r/tests.log")
+        )
+    )
+    assert any("succeeded outcome cannot report failed tests" in p for p in problems), problems
+
+
+def test_tests_failed_requires_matching_error_code():
+    problems = validate_completion_manifest(
+        completion_manifest(
+            outcome=CompletionOutcome.TESTS_FAILED,
+            error_code="model_failed",
+            tests=RunTestReport("failed", None, None),
+        )
+    )
+    assert any("error_code=tests_failed" in p for p in problems), problems
+
+
+@pytest.mark.parametrize(
+    ("outcome", "error_code"),
+    [(CompletionOutcome.FAILED, None), (CompletionOutcome.INTERRUPTED, None)],
+)
+def test_failure_outcomes_require_error_code(outcome, error_code):
+    problems = validate_completion_manifest(
+        completion_manifest(outcome=outcome, error_code=error_code, commit=None, pr_url=None)
+    )
+    assert any("requires error_code" in p for p in problems), problems

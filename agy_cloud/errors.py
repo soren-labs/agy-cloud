@@ -25,10 +25,10 @@ class ErrorCode(StrEnum):
     GENERATION_MISMATCH = "generation_mismatch"  # 409: late callback from an older generation
     LEASE_NOT_HELD = "lease_not_held"  # 409: session lost the agent lease (release race)
     TOKEN_VERSION_CONFLICT = "token_version_conflict"  # 409: account token CAS failed
-    # internal authz
+    # internal authz (identities match CONTRACTS.md "Internal authentication")
     FORBIDDEN_SESSION = "forbidden_session"  # 403: capability not bound to this run/session
-    FORBIDDEN_SCHEDULER = "forbidden_scheduler"  # 403: worker identity used on /internal/tick
-    FORBIDDEN_WORKER = "forbidden_worker"  # 403: scheduler/other identity used on worker routes
+    FORBIDDEN_SCHEDULER = "forbidden_scheduler"  # 403: scheduler identity presented on a worker route
+    FORBIDDEN_WORKER = "forbidden_worker"  # 403: worker identity presented on scheduler-only /internal/tick
     # server
     INTERNAL = "internal"  # 500
 

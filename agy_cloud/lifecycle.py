@@ -11,9 +11,12 @@ from typing import Literal
 
 from agy_cloud.models import (
     AgentStatus,
+    ContractError,
+    RunFailureCode,
     RunStatus,
     SessionIdentity,
 )
+from agy_cloud.protocols.snapshot import CompletionOutcome
 
 # --- Agent state machine (V1-SCOPE §5.1) ---
 AGENT_TRANSITIONS: dict[AgentStatus, frozenset[AgentStatus]] = {
@@ -107,17 +110,35 @@ def resolve_followup_target(lease_held_by_session: bool) -> FollowupTarget:
     return "current_session" if lease_held_by_session else "new_session"
 
 
-def expired_lease_run_outcome(manifest_persisted: bool) -> tuple[RunStatus, str]:
+def expired_lease_run_outcome(
+    manifest_outcome: str | None,
+    *,
+    error_code: str | None = None,
+) -> tuple[RunStatus, str]:
     """Reaper rule for an expired lease (A5 / V1-SCOPE §5.4).
 
-    A run whose completion manifest proves the run finished and its artifacts
-    were uploaded must NOT be overwritten as failed; the reaper reconciles it
-    as-is. Otherwise the run fails with lost_lease and the account slot and VM
-    are released. Failed runs are never automatically replayed.
+    The reaper first reads the persisted completion manifest and reconciles
+    its outcome AS-IS; a persisted outcome is never upgraded:
+    - succeeded / no_changes              -> SUCCEEDED (manifest_reconciled)
+    - tests_failed / failed / interrupted -> FAILED, preserving the
+      manifest's original error code (tests_failed is never SUCCEEDED)
+    - cancelled                          -> CANCELLED
+    - no manifest                        -> FAILED(lost_lease); slot/VM/disk
+      released and nothing replayed.
     """
-    if manifest_persisted:
+    if manifest_outcome is None:
+        return RunStatus.FAILED, RunFailureCode.LOST_LEASE.value
+    if manifest_outcome in (CompletionOutcome.SUCCEEDED, CompletionOutcome.NO_CHANGES):
         return RunStatus.SUCCEEDED, "manifest_reconciled"
-    return RunStatus.FAILED, "lost_lease"
+    if manifest_outcome == CompletionOutcome.TESTS_FAILED:
+        return RunStatus.FAILED, RunFailureCode.TESTS_FAILED.value
+    if manifest_outcome == CompletionOutcome.FAILED:
+        return RunStatus.FAILED, error_code or RunFailureCode.INTERNAL.value
+    if manifest_outcome == CompletionOutcome.INTERRUPTED:
+        return RunStatus.FAILED, RunFailureCode.INTERRUPTED.value
+    if manifest_outcome == CompletionOutcome.CANCELLED:
+        return RunStatus.CANCELLED, "cancelled"
+    raise ContractError(f"unknown completion outcome: {manifest_outcome!r}")
 
 
 def interruption_outcome(wip_uploaded: bool) -> tuple[RunStatus, str]:
@@ -130,3 +151,30 @@ def interruption_outcome(wip_uploaded: bool) -> tuple[RunStatus, str]:
     """
     del wip_uploaded  # both outcomes fail the run; upload state only affects evidence
     return RunStatus.FAILED, "interrupted"
+
+
+# --- pop-run authorization (V1-SCOPE §5.1: lease-held precondition) ---
+class PopAuthorization(StrEnum):
+    POP_ALLOWED = "accept"
+    # released or rebound lease: an old session must never steal an unbound run
+    LEASE_NOT_HELD = "lease_not_held"
+    # same session but stale or never-issued generation
+    GENERATION_MISMATCH = "generation_mismatch"
+
+
+def check_pop_authorization(
+    presented: SessionIdentity, lease_holder: SessionIdentity | None
+) -> PopAuthorization:
+    """pop-run rule: only the CURRENT lease holder may claim the next run.
+
+    A released lease (runs left unbound) or one rebound to a different
+    session is LEASE_NOT_HELD — the unbound run waits for the scheduler to
+    bind it to a NEW session; an old session must never steal it. A matching
+    session with a stale or never-issued generation is GENERATION_MISMATCH.
+    Rejected pops mutate nothing (RunRepository.pop contract).
+    """
+    if lease_holder is None or lease_holder.session_id != presented.session_id:
+        return PopAuthorization.LEASE_NOT_HELD
+    if check_session_callback(presented, lease_holder) is not FencingVerdict.ACCEPT:
+        return PopAuthorization.GENERATION_MISMATCH
+    return PopAuthorization.POP_ALLOWED

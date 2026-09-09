@@ -23,6 +23,7 @@ from agy_cloud.models import (
     validate_run_id,
     validate_session_id,
 )
+from agy_cloud.protocols.snapshot import CompletionOutcome
 
 A = AgentStatus
 
@@ -131,18 +132,74 @@ def test_followup_after_release_goes_to_new_session():
     assert lifecycle.resolve_followup_target(False) == "new_session"
 
 
+# --- pop authorization (lease-held precondition, negative/race contract) ---
+
+def test_pop_allowed_only_for_current_lease_holder():
+    assert lifecycle.check_pop_authorization(identity(), identity()) == (
+        lifecycle.PopAuthorization.POP_ALLOWED
+    )
+
+
+def test_pop_rejected_when_lease_was_released():
+    # released lease: runs are unbound and must not be stolen by an old session
+    assert lifecycle.check_pop_authorization(identity(), None) == (
+        lifecycle.PopAuthorization.LEASE_NOT_HELD
+    )
+
+
+def test_pop_rejected_when_lease_rebound_to_new_session():
+    holder = identity(session="s-9999aaaabbbb", gen=1)  # scheduler re-bound the agent
+    old_session = identity(session="s-0f1e2d3c4b5a", gen=1)
+    assert lifecycle.check_pop_authorization(old_session, holder) == (
+        lifecycle.PopAuthorization.LEASE_NOT_HELD
+    )
+
+
+@pytest.mark.parametrize(("presented_gen", "holder_gen"), [(1, 2), (3, 2)])
+def test_pop_rejected_on_stale_or_never_issued_generation(presented_gen, holder_gen):
+    presented = identity(gen=presented_gen)
+    holder = identity(gen=holder_gen)
+    assert lifecycle.check_pop_authorization(presented, holder) == (
+        lifecycle.PopAuthorization.GENERATION_MISMATCH
+    )
+
+
 # --- expired lease / interruption outcomes ---
 
-def test_expired_lease_with_persisted_manifest_is_not_overwritten():
-    status, detail = lifecycle.expired_lease_run_outcome(manifest_persisted=True)
-    assert status == RunStatus.SUCCEEDED
-    assert detail == "manifest_reconciled"
+@pytest.mark.parametrize(
+    ("outcome", "error_code", "expected_status", "expected_detail"),
+    [
+        (CompletionOutcome.SUCCEEDED, None, RunStatus.SUCCEEDED, "manifest_reconciled"),
+        (CompletionOutcome.NO_CHANGES, None, RunStatus.SUCCEEDED, "manifest_reconciled"),
+        (CompletionOutcome.TESTS_FAILED, "tests_failed", RunStatus.FAILED, "tests_failed"),
+        (CompletionOutcome.FAILED, "quota_exhausted", RunStatus.FAILED, "quota_exhausted"),
+        (CompletionOutcome.FAILED, None, RunStatus.FAILED, "internal"),
+        (CompletionOutcome.INTERRUPTED, "interrupted", RunStatus.FAILED, "interrupted"),
+        (CompletionOutcome.CANCELLED, None, RunStatus.CANCELLED, "cancelled"),
+        (None, None, RunStatus.FAILED, "lost_lease"),
+    ],
+)
+def test_expired_lease_reconciles_manifest_outcome_as_is(
+    outcome, error_code, expected_status, expected_detail
+):
+    assert lifecycle.expired_lease_run_outcome(outcome, error_code=error_code) == (
+        expected_status,
+        expected_detail,
+    )
 
 
-def test_expired_lease_without_manifest_fails_lost_lease():
-    status, detail = lifecycle.expired_lease_run_outcome(manifest_persisted=False)
-    assert status == RunStatus.FAILED
-    assert detail == "lost_lease"
+@pytest.mark.parametrize(
+    "outcome",
+    [CompletionOutcome.TESTS_FAILED, CompletionOutcome.INTERRUPTED, CompletionOutcome.CANCELLED],
+)
+def test_expired_lease_never_reconciles_bad_outcomes_to_succeeded(outcome):
+    status, _ = lifecycle.expired_lease_run_outcome(outcome)
+    assert status is not RunStatus.SUCCEEDED
+
+
+def test_expired_lease_rejects_unknown_outcome():
+    with pytest.raises(ContractError):
+        lifecycle.expired_lease_run_outcome("mysterious")
 
 
 @pytest.mark.parametrize("wip_uploaded", [True, False])

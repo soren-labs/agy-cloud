@@ -17,13 +17,16 @@ from __future__ import annotations
 import posixpath
 import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from agy_cloud.models import (
     AgentId,
     Generation,
+    RunFailureCode,
     RunId,
     Seq,
     SessionId,
+    TestsStatus,
     Usage,
 )
 
@@ -79,7 +82,7 @@ class TestReport:
     log_object: str | None
 
 
-class CompletionOutcome:
+class CompletionOutcome(StrEnum):
     """Outcome codes for POST /internal/runs/{id}/finished (V1-SCOPE §5.2)."""
 
     SUCCEEDED = "succeeded"
@@ -87,6 +90,7 @@ class CompletionOutcome:
     TESTS_FAILED = "tests_failed"  # model ok, tests failed; Check Run failure
     FAILED = "failed"  # model/classified failure (quota, timeout, malformed...)
     INTERRUPTED = "interrupted"  # A6: control plane unreachable at finish time
+    CANCELLED = "cancelled"  # worker stopped on a stop request; run stays CANCELLED
 
 
 @dataclass(frozen=True)
@@ -157,4 +161,15 @@ def validate_completion_manifest(manifest: CompletionManifest) -> list[str]:
         problems.append("unpushed report must not claim a pushed commit")
     if manifest.outcome == CompletionOutcome.SUCCEEDED and manifest.unpushed:
         problems.append("succeeded run cannot be unpushed")
+    # V1-SCOPE §5.2: model SUCCESS never overrides failing tests, and a
+    # tests_failed report must actually carry failed tests + its error code.
+    if manifest.outcome == CompletionOutcome.TESTS_FAILED:
+        if manifest.tests.status != TestsStatus.FAILED.value:
+            problems.append("tests_failed outcome requires tests.status=failed")
+        if manifest.error_code != RunFailureCode.TESTS_FAILED.value:
+            problems.append("tests_failed outcome requires error_code=tests_failed")
+    if manifest.outcome == CompletionOutcome.SUCCEEDED and manifest.tests.status == TestsStatus.FAILED.value:
+        problems.append("succeeded outcome cannot report failed tests; report tests_failed")
+    if manifest.outcome in (CompletionOutcome.FAILED, CompletionOutcome.INTERRUPTED) and not manifest.error_code:
+        problems.append(f"{manifest.outcome.value} outcome requires error_code")
     return problems

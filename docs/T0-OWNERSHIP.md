@@ -61,7 +61,7 @@ is documented in the Makefile header; CI uses plain `make` on setup-python):
 | Command | Result |
 | --- | --- |
 | `make lint PY=.venv/bin/python` | PASS, exit 0 (compileall + `ruff check .`) |
-| `make test PY=.venv/bin/python` | PASS, exit 0 — 122 passed |
+| `make test PY=.venv/bin/python` | PASS, exit 0 — 147 passed (review follow-up: 25 new tests for the six blocking findings) |
 | `make contract-check PY=.venv/bin/python` | PASS, exit 0 — `OK (25 operations, 63 schemas)` |
 | `make verify-creds PY=.venv/bin/python` (agy-ci identity active) | PASS, exit 0 — 6/6 checks: identity `agy-ci@agy-cloud-ci.iam.gserviceaccount.com`, project `agy-cloud-ci`, Firestore default database reachable, `gs://agy-cloud-agy-cloud-ci` listable, Compute listing (0 instances), named secret `e2e-fake-agy-marker` read (28 bytes; payload not printed) |
 

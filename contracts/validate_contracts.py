@@ -35,6 +35,7 @@ sys.path.insert(0, str(ROOT))
 
 from agy_cloud import errors as err_mod
 from agy_cloud import models as models_mod
+from agy_cloud.protocols import snapshot as snapshot_mod
 
 OPENAPI = ROOT / "contracts" / "openapi.yaml"
 CONTRACTS_MD = ROOT / "docs" / "CONTRACTS.md"
@@ -158,6 +159,7 @@ def check(spec: dict[str, Any]) -> list[str]:
         "AccountStatus": models_mod.AccountStatus,
         "TestsStatus": models_mod.TestsStatus,
         "SessionEndReason": models_mod.SessionEndReason,
+        "CompletionOutcome": snapshot_mod.CompletionOutcome,
     }
     schemas = spec["components"]["schemas"]
     for name, enum_cls in enum_checks.items():

@@ -129,10 +129,15 @@ class RunRepository(Protocol):
         *,
         idempotency_key: IdempotencyKey,
     ) -> PopResult | None:
-        """Atomically claim the next QUEUED run for this agent into this session.
+        """Atomically claim the next QUEUED run bound to this session.
 
-        Only runs bound to the presented session (or unbound after release)
-        are eligible. Stale generation -> GENERATION_MISMATCH (409).
+        Precondition (lifecycle.check_pop_authorization): this session
+        CURRENTLY holds the agent lease with a matching generation. A
+        released lease (runs left unbound) or one rebound to a different
+        session is LEASE_NOT_HELD — an old session must never steal an
+        unbound run; the scheduler binds it to a NEW session. A stale or
+        never-issued generation is GENERATION_MISMATCH. Rejected pops
+        mutate nothing.
         """
         ...
 

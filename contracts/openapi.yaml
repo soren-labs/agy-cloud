@@ -692,7 +692,12 @@ paths:
         manifest is idempotent (200, no double effects). A manifest from a
         stale generation is rejected 409 generation_mismatch and MUST NOT
         modify the newer session's state. outcome tests_failed or no_changes
-        follow V1-SCOPE §5.2 (failed Check Run / null pr_url).
+        follow V1-SCOPE §5.2 (failed Check Run / null pr_url):
+        tests_failed requires tests.status=failed and error_code=tests_failed;
+        succeeded cannot carry tests.status=failed; failed/interrupted require
+        error_code; cancelled reports a worker that stopped on a stop request
+        (the run stays CANCELLED and the reaper never reconciles it to
+        SUCCEEDED).
       security:
         - workerIdToken: []
           sessionCapability: []
@@ -790,11 +795,15 @@ paths:
       summary: Claim the next queued run into this session
       description: >-
         Returns the next QUEUED run bound to the presented session (or
-        run: null when none). The concurrent followup-vs-release race is
-        resolved inside the enqueue/release transaction: runs enqueued before
-        release stay with the current session; after release the scheduler
-        binds them to a new session. If this session no longer holds the
-        agent lease, the call is 409 lease_not_held (never steals runs).
+        run: null when none). Only a CURRENTLY held lease with a matching
+        generation may pop: a released lease (runs left unbound) or one
+        rebound to a different session is 409 lease_not_held — an old
+        session never steals an unbound run; a stale or never-issued
+        generation is 409 generation_mismatch; neither mutates the queue.
+        The concurrent followup-vs-release race is resolved inside the
+        enqueue/release transaction: runs enqueued before release stay with
+        the current session; after release the scheduler binds them to a
+        new session.
       security:
         - workerIdToken: []
           sessionCapability: []
@@ -873,7 +882,9 @@ components:
         Google-signed OIDC ID token; subject = worker service account
         (agy-worker@<project>.iam.gserviceaccount.com). Authenticates
         identity only; authorization additionally requires the session
-        capability. Auto-refreshed from the VM metadata server.
+        capability. Auto-refreshed from the VM metadata server. A scheduler
+        identity presented on a worker route is rejected 403
+        forbidden_scheduler; the scheduler and worker realms never cross.
     sessionCapability:
       type: apiKey
       in: header
@@ -1163,7 +1174,7 @@ components:
       enum: [finished, cancelled, error, lost_lease, preempted, timeout, reaped]
     CompletionOutcome:
       type: string
-      enum: [succeeded, no_changes, tests_failed, failed, interrupted]
+      enum: [succeeded, no_changes, tests_failed, failed, interrupted, cancelled]
 
     Usage:
       type: object

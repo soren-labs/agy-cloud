@@ -238,26 +238,44 @@ class Prompt:
 
 
 @dataclass(frozen=True)
+class AgentStats:
+    runs: int
+    total_tokens: int
+    total_seconds: float
+
+
+@dataclass(frozen=True)
+class AgentSnapshot:
+    """Nested Agent.snapshot object exactly as published (closed schema)."""
+
+    gcs_uri: str
+    seq: Seq
+    conversation_id: str
+    agy_version: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class Agent:
+    # Required-ness mirrors openapi.yaml Agent (parity-tested): schema-required
+    # fields are positional; schema-optional fields default to None/false.
     id: AgentId
     status: AgentStatus
     mode: str  # V1: always "code"
-    model: str | None  # requested model; resolved default at first claim
     source: Source
     target: Target
-    account_id: AccountId | None  # bound account (sticky); null until first claim
-    stats: dict
-    snapshot_gcs_uri: str | None
-    snapshot_seq: Seq | None
-    conversation_id: str | None
-    archived_from: AgentStatus | None  # pre-archive status restored by unarchive
-    webhook_url: str | None
-    webhook_secret_set: bool
+    stats: AgentStats
     created_at: str
     updated_at: str
-    last_run_at: str | None
     expires_at: str
-    archived_at: str | None
+    model: str | None = None  # requested model; resolved default at first claim
+    account_id: AccountId | None = None  # bound account (sticky); null until first claim
+    snapshot: AgentSnapshot | None = None
+    archived_from: AgentStatus | None = None  # pre-archive status restored by unarchive
+    webhook_url: str | None = None
+    webhook_secret_set: bool = False
+    last_run_at: str | None = None
+    archived_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -268,18 +286,18 @@ class Run:
     prompt: Prompt
     origin: RunOrigin
     status: RunStatus
-    result: RunResult | None
     tests: RunTests
-    usage: Usage | None
-    duration_seconds: float | None
-    response: str | None
-    session_id: SessionId | None
-    generation: Generation | None
-    error: RunError | None
     retries: int
     created_at: str
-    started_at: str | None
-    finished_at: str | None
+    result: RunResult | None = None
+    usage: Usage | None = None
+    duration_seconds: float | None = None
+    response: str | None = None
+    session_id: SessionId | None = None
+    generation: Generation | None = None
+    error: RunError | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -337,16 +355,23 @@ OUTBOUND_WEBHOOK_SIGNATURE_HEADER = "X-Webhook-Signature"  # value: sha256=<hmac
 
 
 @dataclass(frozen=True)
+class WebhookTarget:
+    """Target subset delivered in webhook payloads (closed published schema)."""
+
+    branch_name: str | None = None
+    pr_url: str | None = None
+
+
+@dataclass(frozen=True)
 class OutboundWebhookEvent:
     event: str
     timestamp: str
     id: AgentId
     status: AgentStatus
     source: Source | None = None
-    target: Target | None = None
+    target: WebhookTarget | None = None
     run_id: RunId | None = None
     run_seq: Seq | None = None
     summary: str | None = None
-    usage: Usage | None = None
     tests_status: TestsStatus | None = None
     commit: str | None = None
