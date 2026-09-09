@@ -1,5 +1,5 @@
 {
   "snapshot": "ubuntu-24.04",
-  "install": "python3 -m pip install -e '.[dev]'",
+  "install": "set -eu; if [ -n \"${GCP_SA_KEY_B64:-}\" ]; then mkdir -p \"$HOME/.config/agy-cloud\"; printf '%s' \"$GCP_SA_KEY_B64\" | base64 -d > \"$HOME/.config/agy-cloud/agy-ci-key.json\"; chmod 600 \"$HOME/.config/agy-cloud/agy-ci-key.json\"; export GOOGLE_APPLICATION_CREDENTIALS=\"$HOME/.config/agy-cloud/agy-ci-key.json\"; gcloud auth activate-service-account --key-file=\"$GOOGLE_APPLICATION_CREDENTIALS\" --project=\"$GCP_PROJECT\" >/dev/null 2>&1 || true; fi; python3 -m pip install -e '.[dev]'",
   "terminals": []
 }
